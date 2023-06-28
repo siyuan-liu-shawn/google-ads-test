@@ -1,8 +1,6 @@
 import hashlib
 
 from google.ads.googleads.client import GoogleAdsClient
-from google.ads.googleads.v14.enums.types.offline_user_data_job_status import OfflineUserDataJobStatusEnum
-from google.ads.googleads.v14.enums.types.offline_user_data_job_type import OfflineUserDataJobTypeEnum
 
 # init client
 client = GoogleAdsClient.load_from_storage("./google-ads.yaml")
@@ -10,8 +8,6 @@ customer_id = '1493142199'
 
 
 def main():
-    googleads_service = client.get_service("GoogleAdsService")
-
     user_list = create_customer_match_user_list(new=False)
 
     raw_records = get_records_from_bigquery()
