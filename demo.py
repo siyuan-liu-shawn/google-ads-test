@@ -4,47 +4,82 @@ from google.ads.googleads.client import GoogleAdsClient
 
 # init client
 client = GoogleAdsClient.load_from_storage("./google-ads.yaml")
-customer_id = '1493142199'
+customer_id = '2390966929'
 
 
 def main():
-    user_list = create_customer_match_user_list(new=False)
+    '''
+    query = """
+        SELECT
+            user_list.crm_based_user_list.upload_key_type
 
+        FROM
+            user_list
+        WHERE
+            user_list.id = 8080319142
+    """
+    google_ads_service = client.get_service("GoogleAdsService")
+    results = google_ads_service.search(customer_id=customer_id, query=query)
+    next(iter(results)).user_list.crm_based_user_list.upload_key_type
+
+
+
+    user_list = create_customer_match_user_list(new=False)
+'''
     raw_records = get_records_from_bigquery()
 
-    add_users_to_customer_match_user_list_by_job(user_list=user_list, raw_records=raw_records)
+    add_users_to_customer_match_user_list_by_job(user_list="customers/2390966929/userLists/8123501180", raw_records=raw_records)
 
+    # get_user_list_resource_name(customer_id=2390966929, user_list_id=8123501180)
 
-def create_customer_match_user_list(new):
-    if not new:
-        return 'customers/1493142199/userLists/8080319142'
+def print_customer_match_user_list_info(
+        customer_id, user_list_resource_name
+):
+    """Prints information about the Customer Match user list.
 
-    # Creates the UserListService client.
-    user_list_service_client = client.get_service("UserListService")
+    Args:
+        client: The Google Ads client.
+        customer_id: The ID for the customer that owns the user list.
+        user_list_resource_name: The resource name of the user list to which to
+            add users.
+    """
+    # [START add_customer_match_user_list_5]
+    googleads_service_client = client.get_service("GoogleAdsService")
 
-    # Creates the user list operation.
-    user_list_operation = client.get_type("UserListOperation")
+    # Creates a query that retrieves the user list.
+    query = f"""
+        SELECT
+          user_list.size_for_display,
+          user_list.size_for_search
+        FROM user_list
+        WHERE user_list.resource_name = '{user_list_resource_name}'"""
 
-    # Creates the new user list.
-    user_list = user_list_operation.create
-    user_list.name = "Customer Match list 1"
-    user_list.description = (
-        "A list of customers that originated from email and physical addresses"
+    # Issues a search request.
+    search_results = googleads_service_client.search(
+        customer_id=customer_id, query=query
     )
+    # [END add_customer_match_user_list_5]
 
-    ###################### dynamic setting???? #########################
-    user_list.crm_based_user_list.upload_key_type = (
-        client.enums.CustomerMatchUploadKeyTypeEnum.CONTACT_INFO
-    )
-    user_list.membership_life_span = 30
-
-    response = user_list_service_client.mutate_user_lists(
-        customer_id=customer_id, operations=[user_list_operation]
-    )
-    user_list_resource_name = response.results[0].resource_name
+    # Prints out some information about the user list.
+    user_list = next(iter(search_results)).user_list
     print(
-        f"User list with resource name '{user_list_resource_name}' was created."
+        "The estimated number of users that the user list "
+        f"'{user_list.resource_name}' has is "
+        f"{user_list.size_for_display} for Display and "
+        f"{user_list.size_for_search} for Search."
     )
+    print(
+        "Reminder: It may take several hours for the user list to be "
+        "populated. Estimates of size zero are possible."
+    )
+
+def get_user_list_resource_name(customer_id, user_list_id):
+    googleads_service = client.get_service("GoogleAdsService")
+
+    user_list_resource_name = googleads_service.user_list_path(
+        customer_id, user_list_id
+    )
+    print(user_list_resource_name)
 
     return user_list_resource_name
 
@@ -77,8 +112,7 @@ def add_users_to_customer_match_user_list_by_job(user_list, raw_records):
     # Add user to job
     request = client.get_type("AddOfflineUserDataJobOperationsRequest")
     request.resource_name = offline_user_data_job_resource_name
-    for op in build_offline_user_data_job_operations(client, raw_records):
-        request.operations.add().CopyFrom(op)
+    request.operations = build_offline_user_data_job_operations(client, raw_records)
     request.enable_partial_failure = True
     response = offline_user_data_job_service_client.add_offline_user_data_job_operations(
         request=request
@@ -89,9 +123,10 @@ def add_users_to_customer_match_user_list_by_job(user_list, raw_records):
 
     # Issues a request to run the offline user data job for executing all
     # added operations.
-    offline_user_data_job_service_client.run_offline_user_data_job(
+    operations_response = offline_user_data_job_service_client.run_offline_user_data_job(
         resource_name=offline_user_data_job_resource_name
     )
+    print(operations_response.result())
 
 
 def get_records_from_bigquery():
@@ -185,7 +220,7 @@ def build_offline_user_data_job_operations(client, raw_records):
         # OfflineUserDataJobOperation and add the UserData to it.
         if user_data.user_identifiers:
             operation = client.get_type("OfflineUserDataJobOperation")
-            operation.create.CopyFrom(user_data)
+            operation.create = user_data
             operations.append(operation)
 
     return operations
